@@ -1,0 +1,50 @@
+# Prometheus configuration for the Docker Compose environment.
+# (On Kubernetes, kube-prometheus-stack + the Helm chart's ServiceMonitor are used instead.)
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    platform: ai-ecommerce-devops
+
+rule_files:
+  - /etc/prometheus/alert.rules.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Host metrics: CPU, memory, disk, network
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # Per-container CPU / memory
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  # Nginx request / connection metrics for the storefront
+  - job_name: nexvion-nginx
+    static_configs:
+      - targets: ["nginx-exporter:9113"]
+        labels:
+          service: nexvion-store
+
+  # Black-box availability + latency of the storefront as a user sees it
+  - job_name: nexvion-availability
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://nexvion:8080/health
+          - http://nexvion:8080/
+          - http://nexvion:8080/products.html
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

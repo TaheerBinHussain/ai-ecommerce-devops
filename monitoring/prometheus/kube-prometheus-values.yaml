@@ -1,0 +1,30 @@
+# kube-prometheus-stack values for the Kubernetes environments (kind / k3s)
+# Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metrics
+prometheus:
+  prometheusSpec:
+    # Discover ServiceMonitors/PrometheusRules from every namespace and release
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    retention: 7d
+    resources:
+      requests: { cpu: 100m, memory: 400Mi }
+
+grafana:
+  adminPassword: ""          # set with --set grafana.adminPassword=... (scripts/k8s-observability.sh generates one)
+  defaultDashboardsTimezone: browser
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+
+# Not reachable on kind / k3s single node
+kubeEtcd: { enabled: false }
+kubeControllerManager: { enabled: false }
+kubeScheduler: { enabled: false }
+kubeProxy: { enabled: false }
