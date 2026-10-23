@@ -1,0 +1,21 @@
+# Ships the storefront container logs (Docker json-file driver) to Logstash.
+filebeat.autodiscover:
+  providers:
+    - type: docker
+      templates:
+        - condition:
+            contains:
+              docker.container.name: nexvion-store
+          config:
+            - type: container
+              paths:
+                - /var/lib/docker/containers/${data.docker.container.id}/*.log
+
+processors:
+  - add_host_metadata: ~
+
+output.logstash:
+  hosts: ["logstash:5044"]
+
+logging.level: info
+logging.metrics.enabled: false
