@@ -1,0 +1,199 @@
+// AI-Powered E-Commerce DevOps platform - CI/CD pipeline
+// GitHub push -> checkout -> deps -> build -> test -> security -> docker build -> image scan
+//             -> push -> deploy (Helm rolling update) -> health check -> success / AI incident report
+//
+// Jenkins prerequisites (see docs/deployment.md#jenkins):
+//   - agent with docker, kubectl, helm, python3 (jenkins user in the docker group)
+//   - credentials: kubeconfig-kind (Secret file), and for the AWS target: kubeconfig-aws (Secret file)
+//     + aws-credentials (Username/Password = access key id / secret key)
+//   - plugins: Pipeline, Git, GitHub, Credentials Binding, JUnit, Workspace Cleanup
+
+pipeline {
+    agent any
+
+    parameters {
+        choice(name: 'DEPLOY_TARGET', choices: ['kind', 'aws'], description: 'Where to deploy after a successful build')
+        string(name: 'ECR_REPOSITORY', defaultValue: '', description: 'AWS only: terraform output ecr_repository_url')
+        string(name: 'AWS_REGION', defaultValue: 'ap-south-1', description: 'AWS only')
+        string(name: 'APP_URL', defaultValue: 'http://nexvion.localtest.me:8088', description: 'Public URL used by the health check')
+        booleanParam(name: 'SKIP_DEPLOY', defaultValue: false, description: 'Run CI stages only')
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        timeout(time: 30, unit: 'MINUTES')
+    }
+
+    triggers {
+        // Fallback when the GitHub webhook cannot reach Jenkins (e.g. Jenkins on a laptop)
+        pollSCM('H/5 * * * *')
+    }
+
+    environment {
+        APP_NAME   = 'nexvion-store'
+        NAMESPACE  = 'ecommerce'
+        RELEASE    = 'nexvion'
+        NODE_IMAGE = 'node:22-alpine'
+    }
+
+    stages {
+        stage('Checkout Source') {
+            steps {
+                checkout scm
+                script {
+                    env.GIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_SHORT}"
+                    env.IMAGE_REPO = params.DEPLOY_TARGET == 'aws' ? params.ECR_REPOSITORY : "localhost:5001/${env.APP_NAME}"
+                    if (params.DEPLOY_TARGET == 'aws' && !params.ECR_REPOSITORY) {
+                        error('ECR_REPOSITORY is required when DEPLOY_TARGET=aws')
+                    }
+                    currentBuild.description = "${env.IMAGE_TAG} -> ${params.DEPLOY_TARGET}"
+                }
+                echo "Building ${env.IMAGE_REPO}:${env.IMAGE_TAG}"
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh '''
+                  docker run --rm -u "$(id -u):$(id -g)" -e npm_config_cache=/tmp/.npm \
+                    -v "$WORKSPACE/application:/app" -w /app "$NODE_IMAGE" npm ci --no-audit --no-fund
+                '''
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh '''
+                  docker run --rm -u "$(id -u):$(id -g)" -v "$WORKSPACE/application:/app" -w /app \
+                    -e APP_VERSION=1.0.0 -e GIT_COMMIT="$GIT_SHORT" -e BUILD_NUMBER="$BUILD_NUMBER" \
+                    "$NODE_IMAGE" sh -c "npm run lint && npm run build"
+                  tar -czf "nexvion-store-${IMAGE_TAG}.tgz" -C application/dist .
+                '''
+                archiveArtifacts artifacts: 'nexvion-store-*.tgz', fingerprint: true
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh '''
+                  mkdir -p test-results
+                  docker run --rm -u "$(id -u):$(id -g)" -v "$WORKSPACE:/ws" -w /ws/application "$NODE_IMAGE" \
+                    node --test --test-reporter=spec --test-reporter-destination=stdout \
+                                --test-reporter=junit --test-reporter-destination=/ws/test-results/app.xml
+                  python3 -I -m unittest discover -s ai/incident-analysis/tests -v
+                '''
+            }
+            post {
+                always { junit allowEmptyResults: true, testResults: 'test-results/*.xml' }
+            }
+        }
+
+        stage('Security Checks') {
+            parallel {
+                stage('Secret Scan')     { steps { sh 'security/scan.sh secrets' } }
+                stage('Dependency Scan') { steps { sh 'security/scan.sh deps' } }
+                stage('IaC / K8s Config Scan') { steps { sh 'security/scan.sh config' } }
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                sh '''
+                  docker build -f docker/Dockerfile \
+                    --build-arg GIT_COMMIT="$GIT_SHORT" --build-arg BUILD_NUMBER="$BUILD_NUMBER" \
+                    -t "$IMAGE_REPO:$IMAGE_TAG" .
+                '''
+            }
+        }
+
+        stage('Image Scan') {
+            steps {
+                sh 'security/scan.sh image "$IMAGE_REPO:$IMAGE_TAG"'
+            }
+        }
+
+        stage('Push Image') {
+            when { expression { !params.SKIP_DEPLOY } }
+            steps {
+                script {
+                    if (params.DEPLOY_TARGET == 'aws') {
+                        withCredentials([usernamePassword(credentialsId: 'aws-credentials',
+                                usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                            sh '''
+                              docker run --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY amazon/aws-cli:2.17.50 \
+                                ecr get-login-password --region "$AWS_REGION" \
+                                | docker login --username AWS --password-stdin "${IMAGE_REPO%%/*}"
+                            '''
+                        }
+                    }
+                }
+                sh 'docker push "$IMAGE_REPO:$IMAGE_TAG"'
+            }
+        }
+
+        stage('Deploy') {
+            when {
+                allOf {
+                    expression { !params.SKIP_DEPLOY }
+                    // multibranch: only main deploys; feature branches stop after CI
+                    anyOf { branch 'main'; expression { env.BRANCH_NAME == null } }
+                }
+            }
+            steps {
+                withCredentials([file(credentialsId: "kubeconfig-${params.DEPLOY_TARGET}", variable: 'KUBECONFIG')]) {
+                    sh '''
+                      VALUES=helm/ecommerce/values-kind.yaml
+                      [ "$DEPLOY_TARGET" = "aws" ] && VALUES=helm/ecommerce/values-aws.yaml
+                      scripts/deploy.sh k8s --image "$IMAGE_REPO" --tag "$IMAGE_TAG" --values "$VALUES"
+                    '''
+                }
+            }
+        }
+
+        stage('Health Check') {
+            when { expression { !params.SKIP_DEPLOY } }
+            steps {
+                sh 'scripts/health-check.sh "$APP_URL" --retries 20'
+                sh 'curl -s "$APP_URL/version.json"'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Deployment Success: ${env.IMAGE_REPO}:${env.IMAGE_TAG} is live on ${params.DEPLOY_TARGET}"
+        }
+        failure {
+            // AI-assisted incident analysis of what went wrong (Helm already rolled back on failed deploys)
+            script {
+                try {
+                    withCredentials([file(credentialsId: "kubeconfig-${params.DEPLOY_TARGET}", variable: 'KUBECONFIG')]) {
+                        sh '''
+                          mkdir -p incident
+                          kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp > incident/events.log 2>&1 || true
+                          kubectl -n "$NAMESPACE" get pods -o wide >> incident/events.log 2>&1 || true
+                          kubectl -n "$NAMESPACE" logs -l app.kubernetes.io/instance="$RELEASE" --all-containers \
+                            --prefix --tail=500 > incident/pods.log 2>&1 || true
+                          helm -n "$NAMESPACE" history "$RELEASE" --max 5 >> incident/events.log 2>&1 || true
+                        '''
+                    }
+                } catch (err) {
+                    echo "Could not collect cluster state: ${err}"
+                }
+                sh '''
+                  mkdir -p incident
+                  ls incident/*.log >/dev/null 2>&1 || echo "no cluster logs collected" > incident/none.log
+                  python3 -I ai/incident-analysis/analyze.py incident/*.log --output incident/incident-report.md ${ANTHROPIC_API_KEY:+--llm} || true
+                '''
+                archiveArtifacts artifacts: 'incident/**', allowEmptyArchive: true
+            }
+        }
+        always {
+            archiveArtifacts artifacts: 'security/reports/**', allowEmptyArchive: true
+            sh 'docker image prune -f >/dev/null 2>&1 || true'
+        }
+    }
+}
