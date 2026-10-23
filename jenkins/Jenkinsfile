@@ -36,6 +36,7 @@ pipeline {
         NAMESPACE  = 'ecommerce'
         RELEASE    = 'nexvion'
         NODE_IMAGE = 'node:22-alpine'
+        CI_VOL     = "nexvion-ci-${env.BUILD_NUMBER}"
     }
 
     stages {
@@ -57,9 +58,11 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
+                // Workspace is streamed into a per-build Docker volume (no host bind mounts):
+                // works with snap-confined Docker, remote daemons and Docker-in-Docker agents.
                 sh '''
-                  docker run --rm -u "$(id -u):$(id -g)" -e npm_config_cache=/tmp/.npm \
-                    -v "$WORKSPACE/application:/app" -w /app "$NODE_IMAGE" npm ci --no-audit --no-fund
+                  scripts/ci-volume.sh sync "$CI_VOL"
+                  scripts/ci-volume.sh run "$CI_VOL" "$NODE_IMAGE" application npm ci --no-audit --no-fund
                 '''
             }
         }
@@ -67,9 +70,10 @@ pipeline {
         stage('Build') {
             steps {
                 sh '''
-                  docker run --rm -u "$(id -u):$(id -g)" -v "$WORKSPACE/application:/app" -w /app \
-                    -e APP_VERSION=1.0.0 -e GIT_COMMIT="$GIT_SHORT" -e BUILD_NUMBER="$BUILD_NUMBER" \
-                    "$NODE_IMAGE" sh -c "npm run lint && npm run build"
+                  scripts/ci-volume.sh run "$CI_VOL" "$NODE_IMAGE" application sh -c \
+                    "export APP_VERSION=1.0.0 GIT_COMMIT=$GIT_SHORT BUILD_NUMBER=$BUILD_NUMBER && npm run lint && npm run build"
+                  rm -rf application/dist
+                  scripts/ci-volume.sh fetch "$CI_VOL" application/dist
                   tar -czf "nexvion-store-${IMAGE_TAG}.tgz" -C application/dist .
                 '''
                 archiveArtifacts artifacts: 'nexvion-store-*.tgz', fingerprint: true
@@ -79,10 +83,10 @@ pipeline {
         stage('Test') {
             steps {
                 sh '''
-                  mkdir -p test-results
-                  docker run --rm -u "$(id -u):$(id -g)" -v "$WORKSPACE:/ws" -w /ws/application "$NODE_IMAGE" \
-                    node --test --test-reporter=spec --test-reporter-destination=stdout \
-                                --test-reporter=junit --test-reporter-destination=/ws/test-results/app.xml
+                  rm -rf test-results
+                  scripts/ci-volume.sh run "$CI_VOL" "$NODE_IMAGE" application sh -c \
+                    "mkdir -p /ws/test-results && node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=/ws/test-results/app.xml"
+                  scripts/ci-volume.sh fetch "$CI_VOL" test-results
                   python3 -I -m unittest discover -s ai/incident-analysis/tests -v
                 '''
             }
@@ -193,7 +197,7 @@ pipeline {
         }
         always {
             archiveArtifacts artifacts: 'security/reports/**', allowEmptyArchive: true
-            sh 'docker image prune -f >/dev/null 2>&1 || true'
+            sh 'scripts/ci-volume.sh rm "$CI_VOL" || true; docker image prune -f >/dev/null 2>&1 || true'
         }
     }
 }
