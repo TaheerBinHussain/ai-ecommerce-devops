@@ -1,0 +1,32 @@
+# Configures the EC2 node(s) created by Terraform into a ready-to-deploy Kubernetes host.
+#   ansible-playbook -i inventory/dev.ini playbook.yml
+- name: Configure NEXVION platform nodes
+  hosts: k3s_nodes
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Wait for cloud-init to finish
+      ansible.builtin.command: cloud-init status --wait
+      changed_when: false
+      failed_when: false
+
+  roles:
+    - role: common      # packages, users, directories, timezone
+    - role: hardening   # SSH, firewall, fail2ban, sysctl, automatic security updates
+    - role: docker      # container runtime for ad-hoc tooling / builds
+    - role: k3s         # lightweight Kubernetes + kubeconfig for Jenkins
+    - role: platform    # helm, namespace, ECR pull-secret refresh
+
+  post_tasks:
+    - name: Verify node is Ready
+      ansible.builtin.command: k3s kubectl get nodes --no-headers
+      register: nodes
+      changed_when: false
+      failed_when: "'Ready' not in nodes.stdout"
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "Node: {{ nodes.stdout }}"
+          - "Kubeconfig for Jenkins: {{ k3s_kubeconfig_dest }}"

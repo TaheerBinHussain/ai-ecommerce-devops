@@ -1,0 +1,11 @@
+# Example inventory. Terraform generates inventory/<environment>.ini automatically.
+[k3s_nodes]
+dev-node-1 ansible_host=203.0.113.25
+
+[k3s_nodes:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/.ssh/id_ed25519
+app_environment=dev
+ecr_registry=123456789012.dkr.ecr.ap-south-1.amazonaws.com
+ecr_repository=123456789012.dkr.ecr.ap-south-1.amazonaws.com/nexvion-store
+aws_region=ap-south-1
