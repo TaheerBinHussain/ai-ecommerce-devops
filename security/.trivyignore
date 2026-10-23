@@ -1,0 +1,2 @@
+# Accepted risks (document the reason and a review date for every entry)
+# CVE-XXXX-YYYY  # example: not exploitable - package not used at runtime (review 2026-12-31)

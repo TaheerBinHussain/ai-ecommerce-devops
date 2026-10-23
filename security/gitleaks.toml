@@ -1,0 +1,15 @@
+# Gitleaks configuration: default rules + allowlist for documented placeholders.
+title = "ai-ecommerce-devops"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Template placeholders and generated/vendor content"
+regexes = ['''replace-me''', '''change-me''', '''203\.0\.113\.''']
+paths = [
+  '''application/node_modules''',
+  '''security/reports''',
+  '''docker/\.env$''',
+  '''\.terraform/''',
+]
