@@ -1,0 +1,17 @@
+# Only the application and nginx config are needed in the build context
+**/node_modules
+**/dist
+.git
+.github
+terraform
+ansible
+kubernetes
+helm
+monitoring
+logging
+security/reports
+ai
+docs
+backups
+*.md
+!application/src/README.txt
