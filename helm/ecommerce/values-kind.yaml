@@ -1,0 +1,7 @@
+# Local kind cluster (scripts/deploy.sh kind)
+replicaCount: 3
+ingress:
+  host: nexvion.localtest.me
+metrics:
+  serviceMonitor:
+    enabled: true

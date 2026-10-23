@@ -1,0 +1,22 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ecommerce.fullname" . }}
+  labels: {{- include "ecommerce.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "ecommerce.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace }} }
+        # allow `helm test` and in-namespace health checks
+        - podSelector: {}
+      ports: [{ port: 8080 }]
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Values.networkPolicy.monitoringNamespace }} }
+      ports: [{ port: 9113 }]
+{{- end }}

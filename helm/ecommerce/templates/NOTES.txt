@@ -1,0 +1,8 @@
+NEXVION store {{ .Values.image.tag }} deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+{{- if .Values.ingress.enabled }}
+URL:           http://{{ .Values.ingress.host }}{{ if eq .Values.ingress.host "nexvion.localtest.me" }}:8088{{ end }}
+{{- end }}
+Rollout:       kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "ecommerce.fullname" . }}
+Smoke test:    helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+Rollback:      helm rollback {{ .Release.Name }} -n {{ .Release.Namespace }}
