@@ -1,0 +1,17 @@
+{
+  "name": "nexvion-store",
+  "version": "1.0.0",
+  "description": "NEXVION e-commerce storefront (static HTML/CSS/JS) packaged for the AI-Powered E-Commerce DevOps platform",
+  "private": true,
+  "scripts": {
+    "lint": "htmlhint \"src/**/*.html\"",
+    "test": "node --test",
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "htmlhint": "1.1.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
