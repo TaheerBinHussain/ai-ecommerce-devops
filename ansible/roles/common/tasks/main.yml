@@ -1,0 +1,58 @@
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    state: present
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ timezone }}"
+
+- name: Create docker group (used by the deploy user)
+  ansible.builtin.group:
+    name: docker
+    state: present
+
+- name: Create deploy user
+  ansible.builtin.user:
+    name: "{{ deploy_user }}"
+    shell: /bin/bash
+    groups: "{{ deploy_user_groups }}"
+    append: true
+    create_home: true
+
+- name: Authorise SSH keys for deploy user
+  ansible.posix.authorized_key:
+    user: "{{ deploy_user }}"
+    key: "{{ item }}"
+  loop: "{{ deploy_authorized_keys | select | list }}"
+
+- name: Allow deploy user limited passwordless sudo for service management
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/90-deploy
+    mode: "0440"
+    validate: visudo -cf %s
+    content: |
+      {{ deploy_user }} ALL=(root) NOPASSWD: /usr/bin/systemctl restart k3s, /usr/bin/systemctl status k3s, /usr/local/bin/k3s
+
+- name: Create application directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0750"
+  loop:
+    - "{{ app_dir }}"
+    - "{{ app_dir }}/backups"
+    - "{{ app_dir }}/logs"
+
+- name: Rotate application logs
+  ansible.builtin.template:
+    src: logrotate.j2
+    dest: /etc/logrotate.d/nexvion
+    mode: "0644"

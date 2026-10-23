@@ -1,0 +1,46 @@
+- name: Install Helm
+  ansible.builtin.unarchive:
+    src: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
+    dest: /usr/local/bin
+    remote_src: true
+    extra_opts: [--strip-components=1, linux-amd64/helm]
+    creates: /usr/local/bin/helm
+
+- name: Install AWS CLI (used to refresh ECR credentials)
+  community.general.snap:
+    name: aws-cli
+    classic: true
+
+- name: Create application namespace with restricted Pod Security
+  ansible.builtin.command: >
+    k3s kubectl apply -f -
+  args:
+    stdin: |
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: {{ app_namespace }}
+        labels:
+          pod-security.kubernetes.io/enforce: restricted
+  register: platform_ns_result
+  changed_when: "'created' in platform_ns_result.stdout or 'configured' in platform_ns_result.stdout"
+
+- name: Install ECR pull-secret refresh script
+  ansible.builtin.template:
+    src: ecr-refresh.sh.j2
+    dest: /usr/local/bin/ecr-refresh.sh
+    mode: "0750"
+  when: ecr_registry is defined
+
+- name: Refresh ECR pull secret every 6 hours (tokens expire after 12h)
+  ansible.builtin.cron:
+    name: ecr-pull-secret
+    minute: "0"
+    hour: "*/6"
+    job: /usr/local/bin/ecr-refresh.sh >> {{ app_dir }}/logs/ecr-refresh.log 2>&1
+  when: ecr_registry is defined
+
+- name: Create the ECR pull secret now
+  ansible.builtin.command: /usr/local/bin/ecr-refresh.sh
+  changed_when: true
+  when: ecr_registry is defined

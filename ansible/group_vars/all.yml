@@ -1,0 +1,32 @@
+# Shared configuration for every managed server
+deploy_user: deploy
+deploy_user_groups: [docker]
+# Public keys allowed to log in as the deploy user (Jenkins + admins)
+deploy_authorized_keys:
+  - "{{ lookup('file', '~/.ssh/id_ed25519.pub', errors='ignore') | default('', true) }}"
+
+base_packages:
+  - curl
+  - wget
+  - git
+  - jq
+  - unzip
+  - htop
+  - ca-certificates
+  - gnupg
+  - python3-pip
+  - logrotate
+
+timezone: Asia/Kolkata
+
+# Hardening
+ssh_port: 22
+allowed_tcp_ports: [22, 80, 443, 6443]
+
+# k3s
+k3s_version: v1.30.4+k3s1
+k3s_kubeconfig_dest: "{{ playbook_dir }}/kubeconfig-{{ app_environment | default('dev') }}.yaml"
+helm_version: v3.15.4
+
+app_namespace: ecommerce
+app_dir: /opt/nexvion
