@@ -1,0 +1,180 @@
+# Local multi-service environment for the NEXVION platform.
+#   App only:            docker compose -f docker/docker-compose.yml up -d
+#   + monitoring:        ... --profile monitoring up -d
+#   + centralized logs:  ... --profile logging up -d
+# (scripts/deploy.sh wraps these commands)
+name: nexvion
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  nexvion:
+    image: ${IMAGE_NAME:-nexvion-store}:${IMAGE_TAG:-latest}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-1.0.0}
+        GIT_COMMIT: ${GIT_COMMIT:-local}
+    container_name: nexvion-store
+    ports:
+      - "${APP_PORT:-8082}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    # Hardening: non-root image, read-only FS, no Linux capabilities.
+    # (security_opt no-new-privileges is omitted: snap-packaged Docker's AppArmor profile
+    #  blocks exec with it; on standard Docker CE it is enforced daemon-wide by Ansible.)
+    cap_drop: [ALL]
+    deploy:
+      resources:
+        limits: { cpus: "0.50", memory: 128M }
+    labels:
+      co.elastic.logs/enabled: "true"
+    logging: *default-logging
+    networks: [frontend, observability]
+    restart: unless-stopped
+
+  # ---------------- monitoring profile ----------------
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.3.0
+    profiles: [monitoring]
+    command: ["--nginx.scrape-uri=http://nexvion:8080/nginx_status"]
+    depends_on: [nexvion]
+    networks: [observability]
+    restart: unless-stopped
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    profiles: [monitoring]
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ../monitoring/prometheus/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks: [observability]
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    profiles: [monitoring]
+    command: ["--path.rootfs=/host"]
+    pid: host
+    volumes:
+      - /:/host:ro
+    networks: [observability]
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    profiles: [monitoring]
+    privileged: true
+    devices: ["/dev/kmsg"]
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - ${DOCKER_ROOT:-/var/lib/docker}:/var/lib/docker:ro
+    networks: [observability]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    profiles: [monitoring]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks: [observability]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    profiles: [monitoring]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in docker/.env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on: [prometheus]
+    networks: [observability]
+    restart: unless-stopped
+
+  # ---------------- logging profile (ELK) ----------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    profiles: [logging]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"   # local lab only - enable security for shared/cloud use
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    ports:
+      - "127.0.0.1:9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      retries: 30
+    networks: [observability]
+    restart: unless-stopped
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.15.0
+    profiles: [logging]
+    environment:
+      LS_JAVA_OPTS: -Xms256m -Xmx256m
+    volumes:
+      - ../logging/elk/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      - ../logging/elk/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+    depends_on:
+      elasticsearch: { condition: service_healthy }
+    networks: [observability]
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.0
+    profiles: [logging]
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "${KIBANA_PORT:-5601}:5601"
+    depends_on:
+      elasticsearch: { condition: service_healthy }
+    networks: [observability]
+    restart: unless-stopped
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.15.0
+    profiles: [logging]
+    user: root
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ../logging/elk/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ${DOCKER_ROOT:-/var/lib/docker}/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on: [logstash]
+    networks: [observability]
+    restart: unless-stopped
+
+networks:
+  frontend:
+  observability:
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  es-data:
