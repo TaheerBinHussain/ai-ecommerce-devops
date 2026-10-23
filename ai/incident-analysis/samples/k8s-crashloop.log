@@ -1,0 +1,5 @@
+[pod/nexvion-ecommerce-5f6b9-abcde/nexvion] 2026/10/21 08:02:11 [emerg] 1#1: unknown directive "gzip_typess" in /etc/nginx/conf.d/default.conf:20
+[pod/nexvion-ecommerce-5f6b9-abcde/nexvion] nginx: [emerg] unknown directive "gzip_typess" in /etc/nginx/conf.d/default.conf:20
+Warning  BackOff  pod/nexvion-ecommerce-5f6b9-abcde  Back-off restarting failed container nexvion in pod nexvion-ecommerce-5f6b9-abcde
+NAME                                READY   STATUS             RESTARTS   AGE
+nexvion-ecommerce-5f6b9-abcde       0/2     CrashLoopBackOff   5          4m
