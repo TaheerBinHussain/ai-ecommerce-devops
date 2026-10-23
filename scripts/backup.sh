@@ -11,6 +11,7 @@ keep=7
 stamp="$(date +%Y%m%d-%H%M%S)"
 dest="$ROOT_DIR/backups/$stamp"
 mkdir -p "$dest"
+chmod 700 "$ROOT_DIR/backups" "$dest"   # backups contain docker/.env secrets
 
 log "Backing up configuration"
 tar -czf "$dest/config.tar.gz" -C "$ROOT_DIR" \

@@ -10,6 +10,10 @@ regexes = ['''replace-me''', '''change-me''', '''203\.0\.113\.''']
 paths = [
   '''application/node_modules''',
   '''security/reports''',
+  # git-ignored runtime output (backups intentionally contain docker/.env; kept chmod 700)
+  '''backups/''',
+  '''logs/''',
+  '''incident/''',
   '''docker/\.env$''',
   '''\.terraform/''',
 ]
