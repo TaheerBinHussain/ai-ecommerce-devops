@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nexvion-store
+  namespace: ecommerce
+  labels: { app.kubernetes.io/name: nexvion-store }
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+spec:
+  ingressClassName: nginx
+  rules:
+    # *.localtest.me resolves to 127.0.0.1 (kind). Replace with the real domain in the cloud.
+    - host: nexvion.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nexvion-store
+                port: { name: http }

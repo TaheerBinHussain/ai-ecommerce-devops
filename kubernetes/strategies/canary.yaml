@@ -1,0 +1,58 @@
+# Canary: new version receives a small, adjustable share of real traffic via ingress-nginx.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexvion-store-canary
+  namespace: ecommerce
+  labels: { app.kubernetes.io/name: nexvion-store-canary, track: canary }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: nexvion-store-canary }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: nexvion-store-canary, track: canary }
+      annotations: { co.elastic.logs/enabled: "true" }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 101, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: nexvion
+          image: localhost:5001/nexvion-store:canary
+          ports: [{ name: http, containerPort: 8080 }]
+          readinessProbe: { httpGet: { path: /health, port: http } }
+          resources: { requests: { cpu: 50m, memory: 32Mi }, limits: { cpu: 250m, memory: 128Mi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexvion-store-canary
+  namespace: ecommerce
+spec:
+  selector: { app.kubernetes.io/name: nexvion-store-canary }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nexvion-store-canary
+  namespace: ecommerce
+  annotations:
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "10"   # % of requests sent to the canary
+    # Testers can force the canary with header "X-Canary: always"
+    nginx.ingress.kubernetes.io/canary-by-header: "X-Canary"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: nexvion.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nexvion-store-canary
+                port: { name: http }
