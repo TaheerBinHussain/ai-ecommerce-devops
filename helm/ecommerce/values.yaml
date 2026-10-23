@@ -1,0 +1,69 @@
+replicaCount: 3
+
+image:
+  repository: localhost:5001/nexvion-store
+  tag: latest
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Rolling update: one extra pod at a time, never below desired capacity
+rollingUpdate:
+  maxSurge: 1
+  maxUnavailable: 0
+
+config:
+  APP_ENV: production
+  STORE_NAME: NEXVION
+  LOG_FORMAT: json
+
+secret:
+  create: true
+  # Use an externally managed secret instead (e.g. created by Jenkins/External Secrets)
+  existingSecret: ""
+  values:
+    PAYMENT_GATEWAY_API_KEY: ""
+    ANALYTICS_TOKEN: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  host: nexvion.localtest.me
+  annotations:
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+  tls: []
+
+resources:
+  requests: { cpu: 50m, memory: 32Mi }
+  limits: { cpu: 250m, memory: 128Mi }
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+networkPolicy:
+  enabled: true
+  ingressNamespace: ingress-nginx
+  monitoringNamespace: monitoring
+
+metrics:
+  exporter:
+    enabled: true
+    image: nginx/nginx-prometheus-exporter:1.3.0
+  # Requires the Prometheus Operator CRDs (kube-prometheus-stack)
+  serviceMonitor:
+    enabled: false
+    labels:
+      release: monitoring
+
+podAnnotations:
+  co.elastic.logs/enabled: "true"

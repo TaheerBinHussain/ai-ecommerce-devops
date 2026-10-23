@@ -1,0 +1,15 @@
+{{- if and .Values.metrics.exporter.enabled .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "ecommerce.fullname" . }}
+  labels:
+    {{- include "ecommerce.labels" . | nindent 4 }}
+    {{- toYaml .Values.metrics.serviceMonitor.labels | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{- include "ecommerce.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: 15s
+{{- end }}

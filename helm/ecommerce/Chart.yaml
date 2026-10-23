@@ -1,0 +1,9 @@
+apiVersion: v2
+name: ecommerce
+description: NEXVION e-commerce storefront for the AI-Powered E-Commerce DevOps platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords: [ecommerce, nginx, devops]
+maintainers:
+  - name: Davine Technologies intern

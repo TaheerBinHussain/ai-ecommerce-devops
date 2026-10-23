@@ -1,0 +1,17 @@
+# AWS EC2 + k3s environment provisioned by Terraform/Ansible.
+# image.repository is set by Jenkins to the ECR repository output by Terraform.
+replicaCount: 2
+ingress:
+  className: traefik      # k3s ships Traefik as its ingress controller
+  host: nexvion.example.com
+  annotations: {}
+networkPolicy:
+  ingressNamespace: kube-system
+autoscaling:
+  minReplicas: 2
+  maxReplicas: 6
+podDisruptionBudget:
+  minAvailable: 1
+# Created/refreshed on the node by the Ansible "platform" role
+imagePullSecrets:
+  - name: ecr-pull
