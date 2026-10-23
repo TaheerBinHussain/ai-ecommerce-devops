@@ -17,6 +17,8 @@ for an automated first diagnosis.
 | No data in Kibana | Filebeat cannot read container logs | `DOCKER_ROOT` in `docker/.env` must match `docker info --format '{{.DockerRootDir}}'` |
 | Elasticsearch exits immediately | `vm.max_map_count` too low | `sudo sysctl -w vm.max_map_count=262144` |
 | Grafana panels "No data" | Prometheus target down | Prometheus → Status → Targets; check the exporter container |
+| Jenkins: `error while creating mount source path '/var/lib/jenkins/workspace/...': read-only file system` | Snap-confined Docker cannot bind-mount paths under `/var/lib` | Pipeline uses `scripts/ci-volume.sh` (workspace streamed into a named volume) - no bind mounts needed |
+| Jenkins: `Unable to find Jenkinsfile` | Job Script Path left at the default `Jenkinsfile` | Set Script Path to `jenkins/Jenkinsfile` |
 | Jenkins: `permission denied ... docker.sock` | jenkins user not in docker group | `sudo usermod -aG docker jenkins && sudo systemctl restart jenkins` |
 | Jenkins cannot reach the cluster | Missing/incorrect `kubeconfig-*` credential | Re-export with `kind get kubeconfig --name nexvion` |
 | Terraform `UnauthorizedOperation` | AWS credentials lack permissions | Use an IAM user with EC2, VPC, IAM, ECR permissions |
