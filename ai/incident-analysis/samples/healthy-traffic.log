@@ -1,0 +1,3 @@
+{"@timestamp":"2026-10-22T09:00:01+00:00","service":"nexvion-store","remote_addr":"10.42.0.5","method":"GET","uri":"/","status":200,"bytes_sent":11371,"request_time":0.001,"referer":"","user_agent":"Mozilla/5.0","request_id":"h1"}
+{"@timestamp":"2026-10-22T09:00:02+00:00","service":"nexvion-store","remote_addr":"10.42.0.5","method":"GET","uri":"/products.html","status":200,"bytes_sent":9123,"request_time":0.001,"referer":"","user_agent":"Mozilla/5.0","request_id":"h2"}
+{"@timestamp":"2026-10-22T09:00:03+00:00","service":"nexvion-store","remote_addr":"10.42.0.5","method":"GET","uri":"/payment.html","status":200,"bytes_sent":8001,"request_time":0.002,"referer":"","user_agent":"Mozilla/5.0","request_id":"h3"}

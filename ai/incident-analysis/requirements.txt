@@ -1,0 +1,2 @@
+# Only needed for --llm; the rule engine uses the Python standard library.
+anthropic>=0.70
