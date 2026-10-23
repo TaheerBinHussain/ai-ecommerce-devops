@@ -1,0 +1,70 @@
+# Blue-Green: two identical environments, one live Service that points at one colour.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexvion-blue
+  namespace: ecommerce
+  labels: { app.kubernetes.io/name: nexvion-bg, color: blue }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: nexvion-bg, color: blue }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: nexvion-bg, color: blue }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 101, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: nexvion
+          image: localhost:5001/nexvion-store:v1   # current release
+          ports: [{ name: http, containerPort: 8080 }]
+          readinessProbe: { httpGet: { path: /health, port: http } }
+          resources: { requests: { cpu: 50m, memory: 32Mi }, limits: { cpu: 250m, memory: 128Mi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexvion-green
+  namespace: ecommerce
+  labels: { app.kubernetes.io/name: nexvion-bg, color: green }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: nexvion-bg, color: green }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: nexvion-bg, color: green }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 101, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: nexvion
+          image: localhost:5001/nexvion-store:v2   # new release under test
+          ports: [{ name: http, containerPort: 8080 }]
+          readinessProbe: { httpGet: { path: /health, port: http } }
+          resources: { requests: { cpu: 50m, memory: 32Mi }, limits: { cpu: 250m, memory: 128Mi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]
+---
+# Production traffic - switch by changing spec.selector.color
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexvion-store-live
+  namespace: ecommerce
+spec:
+  selector: { app.kubernetes.io/name: nexvion-bg, color: blue }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+# Always points at the idle colour so it can be tested before cut-over
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexvion-store-preview
+  namespace: ecommerce
+spec:
+  selector: { app.kubernetes.io/name: nexvion-bg, color: green }
+  ports: [{ name: http, port: 80, targetPort: http }]

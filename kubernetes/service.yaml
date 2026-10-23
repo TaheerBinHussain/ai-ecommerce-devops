@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexvion-store
+  namespace: ecommerce
+  labels: { app.kubernetes.io/name: nexvion-store }
+spec:
+  type: ClusterIP
+  selector: { app.kubernetes.io/name: nexvion-store }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+    - { name: metrics, port: 9113, targetPort: metrics }

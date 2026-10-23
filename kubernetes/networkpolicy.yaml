@@ -1,0 +1,19 @@
+# Least privilege networking: only the ingress controller and Prometheus may reach the pods.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nexvion-store
+  namespace: ecommerce
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: nexvion-store }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
+      ports: [{ port: 8080 }]
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: monitoring }
+      ports: [{ port: 9113 }]
