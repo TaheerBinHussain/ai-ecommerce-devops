@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Pipeline</title>
+<style>
+  body { margin: 0; width: 1600px; height: 380px; background: #fff; font-family: "DejaVu Sans", sans-serif; color: #1f2937; }
+  h1 { margin: 0; padding: 22px 32px 4px; font-size: 24px; }
+  .sub { padding: 0 32px 18px; font-size: 14px; color: #6b7280; }
+  .flow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 14px; padding: 0 32px; }
+  .s { border: 2px solid; border-radius: 10px; padding: 10px; font-size: 13px; min-height: 120px; position: relative; background: #fff; }
+  .s b { display: block; font-size: 14.5px; margin-bottom: 4px; }
+  .n { position: absolute; top: -12px; left: 10px; background: inherit; padding: 0 6px; font-size: 12px; font-weight: bold; }
+  .ci { border-color: #3b82f6; } .sec { border-color: #ef4444; } .cd { border-color: #22c55e; } .ops { border-color: #f97316; }
+  .legend { display: flex; gap: 22px; padding: 22px 32px 0; font-size: 13px; }
+  .legend span::before { content: ""; display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 6px; vertical-align: -2px; border: 2px solid; }
+  .l1::before { border-color: #3b82f6 !important; } .l2::before { border-color: #ef4444 !important; } .l3::before { border-color: #22c55e !important; } .l4::before { border-color: #f97316 !important; }
+  .fail { margin: 20px 32px 0; padding: 12px 14px; border: 2px dashed #f97316; border-radius: 10px; font-size: 13.5px; background: #fff7ed; }
+</style></head><body>
+<h1>Jenkins CI/CD pipeline &mdash; GitHub push to verified deployment</h1>
+<div class="sub">Every stage must pass before the next runs. Deploys use a Helm rolling update with automatic rollback.</div>
+<div class="flow">
+  <div class="s ci"><span class="n">1&ndash;2</span><b>GitHub push &rarr; Checkout</b>Webhook / SCM poll triggers the job; image tag = build number + commit SHA</div>
+  <div class="s ci"><span class="n">3&ndash;4</span><b>Install &amp; Build</b>npm ci in node:22 container, HTML lint, build dist/ + version.json, archive artifact</div>
+  <div class="s ci"><span class="n">5</span><b>Test</b>14 storefront tests (JUnit report) + AI analyzer unit tests</div>
+  <div class="s sec"><span class="n">6</span><b>Security checks</b>(parallel) Gitleaks secrets &middot; Trivy dependencies &middot; Trivy IaC/K8s config</div>
+  <div class="s sec"><span class="n">7&ndash;8</span><b>Docker build &rarr; Image scan</b>Multi-stage, non-root image; Trivy gate fails on fixable CRITICAL CVEs</div>
+  <div class="s cd"><span class="n">9&ndash;10</span><b>Push &rarr; Deploy</b>Registry (local / ECR) &rarr; helm upgrade --install, maxUnavailable 0, auto-rollback on failure</div>
+  <div class="s cd"><span class="n">11&ndash;12</span><b>Health check &rarr; Success</b>/health, pages and /version.json through the ingress; build marked successful</div>
+</div>
+<div class="legend"><span class="l1">Continuous integration</span><span class="l2">DevSecOps gates</span><span class="l3">Continuous delivery</span><span class="l4">Operations</span></div>
+<div class="fail"><b>On failure:</b> Helm rolls the release back automatically &rarr; Jenkins collects Kubernetes events, pod logs and Helm history &rarr; the AI incident analyzer classifies the failure, rates severity, and writes <code>incident-report.md</code> (archived with the build) with probable root cause, investigation and remediation steps.</div>
+</body></html>
