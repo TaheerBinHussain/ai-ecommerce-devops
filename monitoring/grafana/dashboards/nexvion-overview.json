@@ -30,7 +30,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "min(probe_success{job=\"nexvion-availability\"})"
+          "expr": "min(probe_success{job=\"nexvion-availability\"}) or (sum(kube_deployment_status_replicas_available{namespace=\"ecommerce\"}) > bool 0)"
         }
       ],
       "fieldConfig": {
@@ -209,7 +209,8 @@
               }
             ]
           },
-          "mappings": []
+          "mappings": [],
+          "noValue": "probes: Compose env"
         },
         "overrides": []
       },
@@ -291,7 +292,8 @@
           "custom": {
             "fillOpacity": 10,
             "lineWidth": 2
-          }
+          },
+          "noValue": "probes: Compose env"
         },
         "overrides": []
       },
@@ -322,8 +324,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[2m])) * 100)",
-          "legendFormat": "CPU %"
+          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[2m])) * 100)",
+          "legendFormat": "{{instance}}"
         }
       ],
       "fieldConfig": {
@@ -364,7 +366,7 @@
         {
           "refId": "A",
           "expr": "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100",
-          "legendFormat": "Memory %"
+          "legendFormat": "{{instance}}"
         }
       ],
       "fieldConfig": {
@@ -404,7 +406,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\".+\"}[2m]))",
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"nexvion.*\"}[2m]))",
           "legendFormat": "{{name}}"
         },
         {
@@ -450,7 +452,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (name) (container_memory_working_set_bytes{name=~\".+\"})",
+          "expr": "sum by (name) (container_memory_working_set_bytes{name=~\"nexvion.*\"})",
           "legendFormat": "{{name}}"
         },
         {
