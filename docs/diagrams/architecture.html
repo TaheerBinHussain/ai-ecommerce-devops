@@ -1,0 +1,114 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Architecture</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; width: 1600px; height: 1040px; background: #ffffff; font-family: "DejaVu Sans", "Liberation Sans", sans-serif; color: #1f2937; }
+  h1 { margin: 0; padding: 22px 32px 6px; font-size: 26px; }
+  .sub { padding: 0 32px 14px; font-size: 14px; color: #6b7280; }
+  .grid { display: grid; grid-template-columns: 300px 1fr 330px; gap: 18px; padding: 0 32px; }
+  .lane { border-radius: 12px; padding: 14px; border: 2px solid; }
+  .lane h2 { margin: 0 0 10px; font-size: 15px; text-transform: uppercase; letter-spacing: .06em; }
+  .box { background: #fff; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-size: 13px; line-height: 1.35; }
+  .box b { display: block; font-size: 14px; margin-bottom: 2px; }
+  .arrow { text-align: center; font-size: 20px; color: #475569; line-height: 1; margin: 2px 0 6px; }
+  .dev { background: #eff6ff; border-color: #3b82f6; }   .dev h2 { color: #1d4ed8; }
+  .run { background: #f0fdf4; border-color: #22c55e; }   .run h2 { color: #15803d; }
+  .obs { background: #fff7ed; border-color: #f97316; }   .obs h2 { color: #c2410c; }
+  .infra { background: #f5f3ff; border-color: #8b5cf6; margin: 18px 32px 0; }  .infra h2 { color: #6d28d9; }
+  .sec { background: #fef2f2; border-color: #ef4444; margin: 14px 32px 0; }    .sec h2 { color: #b91c1c; }
+  .row { display: flex; gap: 10px; align-items: stretch; }
+  .row .box { flex: 1; margin: 0; }
+  .row .arrow { align-self: center; margin: 0; }
+  .ns { border: 2px dashed #16a34a; border-radius: 10px; padding: 10px; background: #ffffffaa; }
+  .ns-title { font-size: 13px; font-weight: bold; color: #15803d; margin-bottom: 8px; }
+  .pods { display: flex; gap: 8px; }
+  .pod { flex: 1; border: 1.5px solid #16a34a; border-radius: 8px; padding: 6px; font-size: 12px; background: #f0fdf4; text-align: center; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: #dcfce7; border: 1px solid #86efac; }
+  .envs { display: flex; gap: 10px; margin-top: 10px; }
+  .env { flex: 1; font-size: 12.5px; border: 1.5px solid #94a3b8; border-radius: 8px; padding: 6px 8px; background: #fff; }
+  .ai { border-color: #f97316; background: #fffbeb; }
+</style></head>
+<body>
+<h1>AI-Powered E-Commerce DevOps &amp; Cloud-Native Delivery Platform</h1>
+<div class="sub">NEXVION storefront &middot; source &rarr; CI/CD &rarr; container registry &rarr; Kubernetes &rarr; monitoring, logging &amp; AI incident analysis</div>
+<div class="grid">
+  <div class="lane dev">
+    <h2>1 &middot; Source &amp; Delivery</h2>
+    <div class="box"><b>Developer (Linux + Git)</b>feature/* branch &rarr; commit &rarr; Pull Request &rarr; review &rarr; merge to main</div>
+    <div class="arrow">&darr;</div>
+    <div class="box"><b>GitHub</b>Single source of truth &middot; PRs &middot; webhook<br>GitHub Actions: lint, tests, Terraform/Helm validation, scans</div>
+    <div class="arrow">&darr; push / webhook</div>
+    <div class="box"><b>Jenkins pipeline (Jenkinsfile)</b>Checkout &rarr; Install deps &rarr; Build &rarr; Test &rarr; Security checks (Gitleaks, Trivy fs/config) &rarr; Docker build &rarr; Image scan (Trivy) &rarr; Push &rarr; Helm deploy &rarr; Health check</div>
+    <div class="arrow">&darr; docker push</div>
+    <div class="box"><b>Container registry</b>Local registry localhost:5001 (kind) &middot; Amazon ECR (scan on push, immutable tags)</div>
+  </div>
+
+  <div class="lane run">
+    <h2>2 &middot; Runtime &mdash; Kubernetes (Helm chart "ecommerce")</h2>
+    <div class="row">
+      <div class="box"><b>Customer</b>Browser &rarr; http(s)://nexvion&hellip;</div>
+      <div class="arrow">&rarr;</div>
+      <div class="box"><b>Ingress controller</b>ingress-nginx (kind) / Traefik (k3s) &middot; rate limit &middot; canary weights</div>
+      <div class="arrow">&rarr;</div>
+      <div class="box"><b>Service</b>ClusterIP :80 &rarr; pods :8080 &middot; :9113 metrics</div>
+    </div>
+    <div class="arrow">&darr;</div>
+    <div class="ns">
+      <div class="ns-title">namespace: ecommerce &nbsp;(Pod Security "restricted")</div>
+      <div class="pods">
+        <div class="pod"><b>Pod 1</b><br>nginx (non-root) + storefront<br>+ nginx-exporter sidecar</div>
+        <div class="pod"><b>Pod 2</b><br>nginx (non-root) + storefront<br>+ nginx-exporter sidecar</div>
+        <div class="pod"><b>Pod 3</b><br>nginx (non-root) + storefront<br>+ nginx-exporter sidecar</div>
+      </div>
+      <div class="chips">
+        <span class="chip">Deployment: RollingUpdate maxSurge 1 / maxUnavailable 0</span>
+        <span class="chip">readiness + liveness /health</span>
+        <span class="chip">ConfigMap (nginx config, env)</span>
+        <span class="chip">Secret</span>
+        <span class="chip">HPA 3&ndash;10 pods @70% CPU</span>
+        <span class="chip">PodDisruptionBudget</span>
+        <span class="chip">NetworkPolicy</span>
+        <span class="chip">ServiceMonitor</span>
+        <span class="chip">Blue-Green &amp; Canary manifests</span>
+      </div>
+    </div>
+    <div class="envs">
+      <div class="env"><b>Local:</b> kind cluster (1 control plane + 2 workers) &middot; Docker Compose for single-host runs</div>
+      <div class="env"><b>Cloud:</b> AWS EC2 (Ubuntu 24.04) running k3s, image pulled from ECR with an auto-refreshed pull secret</div>
+    </div>
+  </div>
+
+  <div class="lane obs">
+    <h2>3 &middot; Observe &amp; Respond</h2>
+    <div class="box"><b>Prometheus</b>nginx-exporter, node-exporter, cAdvisor / kube-state-metrics, blackbox probes &middot; 8 alert rules</div>
+    <div class="arrow">&darr;</div>
+    <div class="box"><b>Grafana</b>"NEXVION Store &mdash; Platform Overview": availability, req/s, latency, CPU, memory, pods, restarts</div>
+    <div class="box"><b>ELK</b>Filebeat &rarr; Logstash (JSON / grok, log_level) &rarr; Elasticsearch &rarr; Kibana</div>
+    <div class="arrow">&darr;</div>
+    <div class="box ai"><b>AI incident analysis</b>Reads ELK / kubectl / pipeline logs &rarr; classifies errors, severity, probable root cause, investigation &amp; remediation (rule engine + optional Claude). Runs automatically on failed Jenkins builds.</div>
+  </div>
+</div>
+
+<div class="lane infra">
+  <h2>4 &middot; Infrastructure as Code &amp; Configuration (underneath)</h2>
+  <div class="row">
+    <div class="box"><b>Terraform</b>modules: network (VPC, subnet, IGW, routes), compute (EC2, SG, IAM role, EIP, IMDSv2, encrypted EBS), registry (ECR) &middot; dev/prod tfvars</div>
+    <div class="arrow">&rarr; generates inventory &rarr;</div>
+    <div class="box"><b>Ansible</b>roles: common (packages, deploy user, dirs, logrotate) &middot; hardening (SSH, UFW, fail2ban, sysctl, auto-updates) &middot; docker &middot; k3s &middot; platform (Helm, namespace, ECR secret cron)</div>
+    <div class="arrow">&rarr; kubeconfig &rarr;</div>
+    <div class="box"><b>Bash automation</b>setup &middot; deploy &middot; stop &middot; health-check &middot; backup &middot; cleanup &middot; logs &middot; system-check &middot; kind-cluster &middot; k8s-observability</div>
+  </div>
+</div>
+
+<div class="lane sec">
+  <h2>5 &middot; DevSecOps controls (across every stage)</h2>
+  <div class="row">
+    <div class="box"><b>Code</b>Gitleaks secret scan &middot; .gitignore for .env/state</div>
+    <div class="box"><b>Dependencies</b>Trivy fs (package-lock.json)</div>
+    <div class="box"><b>Config</b>Trivy config: Dockerfile, K8s, Helm, Terraform</div>
+    <div class="box"><b>Image</b>Trivy image gate (CRITICAL) &middot; non-root, read-only FS, no capabilities</div>
+    <div class="box"><b>Runtime / host</b>Pod Security restricted &middot; NetworkPolicy &middot; Secrets &middot; SSH keys only &middot; UFW &middot; least-privilege IAM</div>
+  </div>
+</div>
+</body></html>
